@@ -1,8 +1,11 @@
-def common_hops(es, site1, site2, site3, site4, ipv6):
+def common_hops(es, host1, host2, host3, host4, ipv6):
     """
     Get list of hops for
-    src : Source (String)
-    dest: Destination (String) 
+    host1 : Source 1 (String)
+    host2: Destination 1(String) 
+    host3 : Source 2 (String)
+    host4: Destination 2(String) 
+    ipv6: (Bool)
     """
     
     query1 = {
@@ -12,15 +15,15 @@ def common_hops(es, site1, site2, site3, site4, ipv6):
           "filter": [
             {
               "term": {
-                "src_site": {
-                  "value": site1
+                "src_host": {
+                  "value": host1
                 }
               }
             },
             {
               "term": {
-                "dest_site": {
-                  "value": site2
+                "dest_host": {
+                  "value": host2
                 }
               }
             },
@@ -37,7 +40,7 @@ def common_hops(es, site1, site2, site3, site4, ipv6):
         "aggs": {
             "the_hash": {
               "terms": {
-                "field": "hash",
+                "field": "route-sha1",
                 "order": {"_count" : "desc"},
                 "size": 1
               }
@@ -58,15 +61,15 @@ def common_hops(es, site1, site2, site3, site4, ipv6):
           "filter": [
             {
               "term": {
-                "src_site": {
-                  "value": site3
+                "src_host": {
+                  "value": host3
                 }
               }
             },
             {
               "term": {
-                "dest_site": {
-                  "value": site4
+                "dest_host": {
+                  "value": host4
                 }
               }
             },
@@ -83,7 +86,7 @@ def common_hops(es, site1, site2, site3, site4, ipv6):
         "aggs": {
             "the_hash": {
               "terms": {
-                "field": "hash",
+                "field": "route-sha1",
                 "order": {"_count" : "desc"},
                 "size": 1
               }
@@ -104,7 +107,7 @@ def common_hops(es, site1, site2, site3, site4, ipv6):
           "filter": [
             {
               "term": {
-                "hash": {
+                "route-sha1": {
                   "value": hash1
                 }
               }
@@ -121,11 +124,12 @@ def common_hops(es, site1, site2, site3, site4, ipv6):
           }
         }
     raw1 = es.search('ps_trace', body=query3) 
+        
     hops1 = raw1['aggregations']['hops_list']['hits']['hits'][0]['_source']['hops']
     the_hops1 = []
     
     for x in range(len(hops1) - 1):
-        the_hops1.append([hops1[x], hops1[x+1]])
+        the_hops1.append([hops1[x], hops1[x+1], x])
         
     
     query4 = {
@@ -135,7 +139,7 @@ def common_hops(es, site1, site2, site3, site4, ipv6):
           "filter": [
             {
               "term": {
-                "hash": {
+                "route-sha1": {
                   "value": hash2
                 }
               }
@@ -156,18 +160,21 @@ def common_hops(es, site1, site2, site3, site4, ipv6):
     the_hops2 = []
     
     for x in range(len(hops2) - 1):
-        the_hops2.append([hops2[x], hops2[x+1]])
+        the_hops2.append([hops2[x], hops2[x+1], x])
+        
+    
         
     common_hops = []   
     
     for x in range(len(hops1) - 1):
         for y in range(len(hops2) - 1):
-            if (the_hops1[x] == the_hops2[y]):
+            if ((the_hops1[x][0] == the_hops2[y][0]) and (the_hops1[x][1] == the_hops2[y][1])):
+                the_hops1[x].append(the_hops2[y][2])
                 common_hops.append(the_hops1[x])
                 
     
     print(len(common_hops))
     for x in range(len(common_hops)):
-        print(common_hops[x][0], ", ", common_hops[x][1])
+        print(common_hops[x][0], ", ", common_hops[x][1], ", ", common_hops[x][2], ", ", common_hops[x][3])
     
      
