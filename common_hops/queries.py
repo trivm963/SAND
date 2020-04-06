@@ -1,13 +1,5 @@
-def find_path(es, host1, host2, ipv6, date, pair):
-    """
-    **change this**
-    Get list of hops for
-    host1 : Source 1 (String)
-    host2: Destination 1(String) 
-    host3 : Source 2 (String)
-    host4: Destination 2(String) 
-    ipv6: (Bool)
-    """    
+def find_path(es, host1, host2, ipv6, date, pair):   
+    #Find the time directly before input time
     queryb1 = {
       "size": 0,
       "query": {
@@ -59,6 +51,7 @@ def find_path(es, host1, host2, ipv6, date, pair):
         return
     timeb = datab1['aggregations']['before_time']['value']
     
+    #Find the time directly after input time
     querya1 = {
       "size": 0,
       "query": {
@@ -110,6 +103,7 @@ def find_path(es, host1, host2, ipv6, date, pair):
         return
     timea = dataa1['aggregations']['after_time']['value']
   
+    #Find hash of path at time before
     query11 = {
       "size": 0,
       "query": {
@@ -163,6 +157,7 @@ def find_path(es, host1, host2, ipv6, date, pair):
         return
     hash11 = data11['aggregations']['the_hash']['buckets'][0]['key']
     
+    #Find hash of path at time before
     query12 = {
       "size": 0,
       "query": {
@@ -216,11 +211,60 @@ def find_path(es, host1, host2, ipv6, date, pair):
         return
     hash12 = data12['aggregations']['the_hash']['buckets'][0]['key']
     
+    #Check whether the path before and after the input time are the same
     if (hash11 == hash12):
         same = True
     else:
         same = False
     
+    #Find dest ip (since dest is not included in hash)
+    query15 = {
+      "size": 0,
+      "query": {
+        "bool": {
+          "filter": [
+            {
+              "term": {
+                "dest_host": {
+                  "value": host2
+                }
+              }
+            },
+            {
+              "term": {
+                "timestamp": {
+                  "value": str(timeb)
+                }
+              }
+            },
+            {
+              "term": {
+                "ipv6": {
+                  "value": ipv6
+                }
+              }
+            }
+          ]
+        }
+      },
+        "aggs": {
+            "dest_ip": {
+              "terms": {
+                "field": "dest",
+                "order": {"_count" : "desc"},
+                "size": 1
+              }
+            }
+          }
+        }
+    
+    data15 = es.search('ps_trace', body=query15)  
+    if not data15['aggregations']['dest_ip']['buckets']:
+        print("no such record, pair " + str(pair))
+        return
+    ip_d = data15['aggregations']['dest_ip']['buckets'][0]['key']
+    
+    #Find hop list associated with before hash (as it is default)
     query31 = {
       "size": 0,
       "query": {
@@ -230,6 +274,13 @@ def find_path(es, host1, host2, ipv6, date, pair):
               "term": {
                 "route-sha1": {
                   "value": hash11
+                }
+              }
+            },
+            {
+              "term": {
+                "dest": {
+                  "value": ip_d
                 }
               }
             }
@@ -252,12 +303,13 @@ def find_path(es, host1, host2, ipv6, date, pair):
     for x in range(len(hops11) - 1):
         the_hops11.append([hops11[x], hops11[x+1], x])
     
+    #Format: the_hops1x[([from0][to0][hop0])][...]...[([from(n-1)][to(n-1)][hop(n-1)])] ie a list of tuples!
     the_data = []
     the_data.append(same)
     the_data.append(the_hops11)
-        
+    
+    #If after time is different, find hop list associated with after hash    
     if (same == False):
-        
         query32 = {
           "size": 0,
           "query": {
@@ -267,6 +319,13 @@ def find_path(es, host1, host2, ipv6, date, pair):
                   "term": {
                     "route-sha1": {
                       "value": hash12
+                    }
+                  }
+                },
+                {
+                  "term": {
+                    "dest": {
+                      "value": ip_d
                     }
                   }
                 }
@@ -292,11 +351,9 @@ def find_path(es, host1, host2, ipv6, date, pair):
         the_data.append(the_hops12)
     
     return the_data
-    #Format: the_data[same][the_hops11][the_hops12]
-    #Format: the_hops1x[([from0][to0][hop0])][...]...
-    #[([from(n-1)][to(n-1)][hop(n-1)])] ie a tuple!
-    #Make less redundant? (wrt before/after queries similar) 
-    
+    #Format: the_data [same][the_hops11][the_hops12] (if the_hops12 exists)
+    #Else, it is [same][the_hops11]. The [same] bool makes sure we don't go to [the_hops12] if it doesn't exist
+       
     
 def common_hops(es, ipv6, date, *sites):
     if (len(sites) % 2 == 1):
@@ -308,32 +365,40 @@ def common_hops(es, ipv6, date, *sites):
     n = 0
     pair = 1
     all_data = []
+    #Get paths/data for all pairs and save them in all_data, looping above function
     while n < len(sites):
         all_data.append(find_path(es, sites[n], sites[n+1], ipv6, date, pair)) 
         pair += 1 
         n += 2
     
-    after_exists = False
+    after_exists = False #We won't run the after code if none exist
     
     print("Pairs with a differing path before and after given time:")
     
+    #Find and output all pairs that have differing before and after paths
     for x in range(len(all_data)):
         if (all_data[x][0] == False):
             after_exists = True
             print(x)
     
     if (after_exists == False):
-        print("None" + '\n')
+        print("None")
+    
+    print('\n')
         
     
     common_arr = [] #before
-    common_arr2 = [] #existing afters
+    common_arr2 = [] #existing afters, rest are before
 
+    #Find the common hops between the first two pairs, and append to an array
+    #element of common_arr: [from, to, place in path 1, place in path 2]
     for x in range(len(all_data[0][1])):
         for y in range(len(all_data[1][1])):
             if ((all_data[0][1][x][0] == all_data[1][1][y][0]) and (all_data[0][1][x][1] == all_data[1][1][y][1])):
                 common_arr.append([all_data[0][1][x][0], all_data[0][1][x][1], all_data[0][1][x][2], all_data[1][1][y][2]])
-                #element of common_arr: [from, to, place in path 1, place in path 2]
+    #Do the same for after common hops
+    #The problem is the first pair and second pair may each both have a different after path, so there are four different combinations. Hence, mutually exclusive if statements
+    #If a pair doesn't have a different after time, we append the 'before' path, as it is the same after (this also holds for the while loop below)
     if (after_exists == True):
         if (all_data[0][0] == False):
             if (all_data[1][0] == False):
@@ -353,9 +418,11 @@ def common_hops(es, ipv6, date, *sites):
                         common_arr2.append([all_data[0][1][x][0], all_data[0][1][x][1], all_data[0][1][x][2], all_data[1][2][y][2]])
         else:
             common_arr2.append(common_arr[0])
-
+        
     pair -= 3
     
+    #Compare each successive pair with the common_arr, altering it as appropriate
+    #Same for common_arr2, but with the after paths
     while pair > 0:
         for x in range(len(all_data[pair][1])):
             found = False
@@ -386,7 +453,8 @@ def common_hops(es, ipv6, date, *sites):
                         if ((y == (len(common_arr2) - 1)) and (found == False)):
                             common_arr2.remove(common_arr2[y])    
         pair -= 1
-        
+    
+    #Output number of common hops followed by the list of common hops
     n_sites = 2
     print("Number of common hops: ", len(common_arr), '\n')
     for x in range(len(common_arr)):
@@ -396,10 +464,12 @@ def common_hops(es, ipv6, date, *sites):
             n_sites += 1
         print(common_arr[x][n_sites])
         n_sites = 2
-        
+    print('\n')    
+    
+    #Output number of after time common hops and list (if it exists)
     if (after_exists == True):    
         n_sites = 2
-        print(len(common_arr2))
+        print("Number of common hops (after time): ", len(common_arr2), '\n')
         for x in range(len(common_arr2)):
             print(common_arr2[x][0], ", ", common_arr2[x][1], ", ", end =" ")
             while n_sites < ((len(sites)/2) + 1):
