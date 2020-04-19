@@ -1,3 +1,104 @@
+def check_bools(es, hash_, pair):
+    #method to check that destination_reached and path_complete are True while looping is False
+    querydr = {
+      "size": 0,
+      "query": {
+        "bool": {
+          "filter": [
+            {
+              "term": {
+                "route-sha1": {
+                  "value": hash_
+                }
+              }
+            }
+          ]
+        }
+      },
+        "aggs": {
+            "dest_reach": {
+              "terms": {
+                "field": "destination_reached",
+                "order": {"_count" : "desc"},
+                "size": 1
+              }
+            }
+          }
+        }
+    
+    datadr = es.search(index='ps_trace', body=querydr)  
+    dr = datadr['aggregations']['dest_reach']['buckets'][0]['key']
+    if (dr == False):
+        print("pair ", pair, " has not reached dest")
+        return False
+    
+    querypc = {
+      "size": 0,
+      "query": {
+        "bool": {
+          "filter": [
+            {
+              "term": {
+                "route-sha1": {
+                  "value": hash_
+                }
+              }
+            }
+          ]
+        }
+      },
+        "aggs": {
+            "path_c": {
+              "terms": {
+                "field": "path_complete",
+                "order": {"_count" : "desc"},
+                "size": 1
+              }
+            }
+          }
+        }
+    
+    datapc = es.search(index='ps_trace', body=querypc)  
+    pc = datapc['aggregations']['path_c']['buckets'][0]['key']
+    if (pc == False):
+        print("pair ", pair, " does not have a complete path")
+        return False
+    
+    queryl = {
+      "size": 0,
+      "query": {
+        "bool": {
+          "filter": [
+            {
+              "term": {
+                "route-sha1": {
+                  "value": hash_
+                }
+              }
+            }
+          ]
+        }
+      },
+        "aggs": {
+            "loop": {
+              "terms": {
+                "field": "looping",
+                "order": {"_count" : "desc"},
+                "size": 1
+              }
+            }
+          }
+        }
+    
+    datal = es.search(index='ps_trace', body=queryl)  
+    loop = datal['aggregations']['loop']['buckets'][0]['key']
+    if (loop == True):
+        print("pair ", pair, " has looping")
+        return False
+   
+    return True
+    
+
 def find_path(es, host1, host2, ipv6, date, pair):   
     #Find the time directly before input time
     queryb1 = {
@@ -44,12 +145,13 @@ def find_path(es, host1, host2, ipv6, date, pair):
             }
           }
         }
-    
-    datab1 = es.search('ps_trace', body=queryb1)  
+    datab1 = es.search(index='ps_trace', body=queryb1)
+
     if not datab1['aggregations']['before_time']['value']:
         print("time before error")
-        return
+        return False
     timeb = datab1['aggregations']['before_time']['value']
+
     
     #Find the time directly after input time
     querya1 = {
@@ -97,12 +199,12 @@ def find_path(es, host1, host2, ipv6, date, pair):
           }
         }
     
-    dataa1 = es.search('ps_trace', body=querya1)  
+    dataa1 = es.search(index='ps_trace', body=querya1)  
     if not dataa1['aggregations']['after_time']['value']:
         print("time after error")
-        return
+        return False
     timea = dataa1['aggregations']['after_time']['value']
-  
+   
     #Find hash of path at time before
     query11 = {
       "size": 0,
@@ -151,11 +253,13 @@ def find_path(es, host1, host2, ipv6, date, pair):
           }
         }
     
-    data11 = es.search('ps_trace', body=query11)  
+    data11 = es.search(index='ps_trace', body=query11)  
     if not data11['aggregations']['the_hash']['buckets']:
         print("no such record, pair " + str(pair))
-        return
+        return False
     hash11 = data11['aggregations']['the_hash']['buckets'][0]['key']
+    if (check_bools(es, hash11, pair) == False):
+        return False
     
     #Find hash of path at time before
     query12 = {
@@ -205,14 +309,16 @@ def find_path(es, host1, host2, ipv6, date, pair):
           }
         }
     
-    data12 = es.search('ps_trace', body=query12)  
+    data12 = es.search(index='ps_trace', body=query12)  
     if not data12['aggregations']['the_hash']['buckets']:
         print("no such record, pair " + str(pair))
-        return
+        return False
     hash12 = data12['aggregations']['the_hash']['buckets'][0]['key']
+    if (check_bools(es, hash11, pair) == False):
+        useb = True
     
     #Check whether the path before and after the input time are the same
-    if (hash11 == hash12):
+    if ((hash11 == hash12) or (useb == True)):
         same = True
     else:
         same = False
@@ -258,10 +364,7 @@ def find_path(es, host1, host2, ipv6, date, pair):
           }
         }
     
-    data15 = es.search('ps_trace', body=query15)  
-    if not data15['aggregations']['dest_ip']['buckets']:
-        print("no such record, pair " + str(pair))
-        return
+    data15 = es.search(index='ps_trace', body=query15)  
     ip_d = data15['aggregations']['dest_ip']['buckets'][0]['key']
     
     #Find hop list associated with before hash (as it is default)
@@ -295,7 +398,7 @@ def find_path(es, host1, host2, ipv6, date, pair):
             }
           }
         }
-    raw11 = es.search('ps_trace', body=query31) 
+    raw11 = es.search(index='ps_trace', body=query31) 
         
     hops11 = raw11['aggregations']['hops_list']['hits']['hits'][0]['_source']['hops']
     the_hops11 = []
@@ -340,7 +443,7 @@ def find_path(es, host1, host2, ipv6, date, pair):
                 }
               }
             }
-        raw12 = es.search('ps_trace', body=query32) 
+        raw12 = es.search(index='ps_trace', body=query32) 
         
         hops12 = raw12['aggregations']['hops_list']['hits']['hits'][0]['_source']['hops']
         the_hops12 = []
@@ -367,7 +470,10 @@ def common_hops(es, ipv6, date, *sites):
     all_data = []
     #Get paths/data for all pairs and save them in all_data, looping above function
     while n < len(sites):
-        all_data.append(find_path(es, sites[n], sites[n+1], ipv6, date, pair)) 
+        whatever = find_path(es, sites[n], sites[n+1], ipv6, date, pair)
+        if (whatever == False):
+            return
+        all_data.append(whatever) 
         pair += 1 
         n += 2
     
@@ -478,6 +584,4 @@ def common_hops(es, ipv6, date, *sites):
             print(common_arr2[x][n_sites])
             n_sites = 2
         
-    
-        
-    #TODO: Testing  
+        #TODO: Testing  
