@@ -1,104 +1,3 @@
-def check_bools(es, hash_, pair):
-    #method to check that destination_reached and path_complete are True while looping is False
-    querydr = {
-      "size": 0,
-      "query": {
-        "bool": {
-          "filter": [
-            {
-              "term": {
-                "route-sha1": {
-                  "value": hash_
-                }
-              }
-            }
-          ]
-        }
-      },
-        "aggs": {
-            "dest_reach": {
-              "terms": {
-                "field": "destination_reached",
-                "order": {"_count" : "desc"},
-                "size": 1
-              }
-            }
-          }
-        }
-    
-    datadr = es.search(index='ps_trace', body=querydr)  
-    dr = datadr['aggregations']['dest_reach']['buckets'][0]['key']
-    if (dr == False):
-        print("pair ", pair, " has not reached dest")
-        return False
-    
-    querypc = {
-      "size": 0,
-      "query": {
-        "bool": {
-          "filter": [
-            {
-              "term": {
-                "route-sha1": {
-                  "value": hash_
-                }
-              }
-            }
-          ]
-        }
-      },
-        "aggs": {
-            "path_c": {
-              "terms": {
-                "field": "path_complete",
-                "order": {"_count" : "desc"},
-                "size": 1
-              }
-            }
-          }
-        }
-    
-    datapc = es.search(index='ps_trace', body=querypc)  
-    pc = datapc['aggregations']['path_c']['buckets'][0]['key']
-    if (pc == False):
-        print("pair ", pair, " does not have a complete path")
-        return False
-    
-    queryl = {
-      "size": 0,
-      "query": {
-        "bool": {
-          "filter": [
-            {
-              "term": {
-                "route-sha1": {
-                  "value": hash_
-                }
-              }
-            }
-          ]
-        }
-      },
-        "aggs": {
-            "loop": {
-              "terms": {
-                "field": "looping",
-                "order": {"_count" : "desc"},
-                "size": 1
-              }
-            }
-          }
-        }
-    
-    datal = es.search(index='ps_trace', body=queryl)  
-    loop = datal['aggregations']['loop']['buckets'][0]['key']
-    if (loop == True):
-        print("pair ", pair, " has looping")
-        return False
-   
-    return True
-    
-
 def find_path(es, host1, host2, ipv6, date, pair):   
     #Find the time directly before input time
     queryb1 = {
@@ -127,7 +26,21 @@ def find_path(es, host1, host2, ipv6, date, pair):
                 }
               }
             },
-              {
+            {
+              "term": {
+                "destination_reached": {
+                  "value": True
+                }
+              }
+            },
+            {
+              "term": {
+                "path_complete": {
+                  "value": True
+                }
+              }
+            },
+            {
               "term": {
                 "ipv6": {
                   "value": ipv6
@@ -180,7 +93,21 @@ def find_path(es, host1, host2, ipv6, date, pair):
                 }
               }
             },
-              {
+            {
+              "term": {
+                "destination_reached": {
+                  "value": True
+                }
+              }
+            },
+            {
+              "term": {
+                "path_complete": {
+                  "value": True
+                }
+              }
+            },
+            {
               "term": {
                 "ipv6": {
                   "value": ipv6
@@ -234,6 +161,20 @@ def find_path(es, host1, host2, ipv6, date, pair):
             },
             {
               "term": {
+                "destination_reached": {
+                  "value": True
+                }
+              }
+            },
+            {
+              "term": {
+                "path_complete": {
+                  "value": True
+                }
+              }
+            },
+            {
+              "term": {
                 "ipv6": {
                   "value": ipv6
                 }
@@ -258,8 +199,8 @@ def find_path(es, host1, host2, ipv6, date, pair):
         print("no such record, pair " + str(pair))
         return False
     hash11 = data11['aggregations']['the_hash']['buckets'][0]['key']
-    if (check_bools(es, hash11, pair) == False):
-        return False
+    #if (check_bools(es, hash11, pair) == False):
+     #   return False
     
     #Find hash of path at time before
     query12 = {
@@ -290,6 +231,20 @@ def find_path(es, host1, host2, ipv6, date, pair):
             },
             {
               "term": {
+                "destination_reached": {
+                  "value": True
+                }
+              }
+            },
+            {
+              "term": {
+                "path_complete": {
+                  "value": True
+                }
+              }
+            },
+            {
+              "term": {
                 "ipv6": {
                   "value": ipv6
                 }
@@ -314,11 +269,11 @@ def find_path(es, host1, host2, ipv6, date, pair):
         print("no such record, pair " + str(pair))
         return False
     hash12 = data12['aggregations']['the_hash']['buckets'][0]['key']
-    if (check_bools(es, hash11, pair) == False):
-        useb = True
+    #if (check_bools(es, hash11, pair) == False): #TODO
+     #   useb = True
     
     #Check whether the path before and after the input time are the same
-    if ((hash11 == hash12) or (useb == True)):
+    if (hash11 == hash12): #or (useb == True)
         same = True
     else:
         same = False
@@ -584,4 +539,108 @@ def common_hops(es, ipv6, date, *sites):
             print(common_arr2[x][n_sites])
             n_sites = 2
         
-        #TODO: Testing  
+        #TODO: Testing
+
+"""
+Old check bools function. Keeping this here just in case!
+
+def check_bools(es, hash_, pair):
+    #method to check that destination_reached and path_complete are True while looping is False
+    querydr = {
+      "size": 0,
+      "query": {
+        "bool": {
+          "filter": [
+            {
+              "term": {
+                "route-sha1": {
+                  "value": hash_
+                }
+              }
+            }
+          ]
+        }
+      },
+        "aggs": {
+            "dest_reach": {
+              "terms": {
+                "field": "destination_reached",
+                "order": {"_count" : "desc"},
+                "size": 1
+              }
+            }
+          }
+        }
+    
+    datadr = es.search(index='ps_trace', body=querydr)  
+    dr = datadr['aggregations']['dest_reach']['buckets'][0]['key']
+    if (dr == False):
+        print("pair ", pair, " has not reached dest")
+        return False
+    
+    querypc = {
+      "size": 0,
+      "query": {
+        "bool": {
+          "filter": [
+            {
+              "term": {
+                "route-sha1": {
+                  "value": hash_
+                }
+              }
+            }
+          ]
+        }
+      },
+        "aggs": {
+            "path_c": {
+              "terms": {
+                "field": "path_complete",
+                "order": {"_count" : "desc"},
+                "size": 1
+              }
+            }
+          }
+        }
+    
+    datapc = es.search(index='ps_trace', body=querypc)  
+    pc = datapc['aggregations']['path_c']['buckets'][0]['key']
+    if (pc == False):
+        print("pair ", pair, " does not have a complete path")
+        return False
+    
+    queryl = {
+      "size": 0,
+      "query": {
+        "bool": {
+          "filter": [
+            {
+              "term": {
+                "route-sha1": {
+                  "value": hash_
+                }
+              }
+            }
+          ]
+        }
+      },
+        "aggs": {
+            "loop": {
+              "terms": {
+                "field": "looping",
+                "order": {"_count" : "desc"},
+                "size": 1
+              }
+            }
+          }
+        }
+    
+    datal = es.search(index='ps_trace', body=queryl)  
+    loop = datal['aggregations']['loop']['buckets'][0]['key']
+    if (loop == True):
+        print("pair ", pair, " has looping")
+        return False
+   
+    return True
+ """   
