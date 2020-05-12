@@ -1,4 +1,4 @@
-def find_path(es, host1, host2, ipv6, date, pair):   
+def find_path(es, host1, host2, ipv6, date, mil, pair):   
     #Find the time directly before input time
     queryb1 = {
       "size": 0,
@@ -8,7 +8,8 @@ def find_path(es, host1, host2, ipv6, date, pair):
             {
               "range": {
                 "timestamp": {
-                  "lte": date
+                  "lte": date,
+                  "gte": int(date) - mil
                 }
               }
             },
@@ -61,7 +62,7 @@ def find_path(es, host1, host2, ipv6, date, pair):
     datab1 = es.search(index='ps_trace', body=queryb1)
 
     if not datab1['aggregations']['before_time']['value']:
-        print("time before error")
+        print("could not find such a path before input time. try different inputs?")
         return False
     timeb = datab1['aggregations']['before_time']['value']
 
@@ -75,7 +76,8 @@ def find_path(es, host1, host2, ipv6, date, pair):
              {
               "range": {
                 "timestamp": {
-                  "gte": date
+                  "gte": date,
+                  "lte": int(date) + mil
                 }
               }
             },
@@ -128,7 +130,8 @@ def find_path(es, host1, host2, ipv6, date, pair):
     
     dataa1 = es.search(index='ps_trace', body=querya1)  
     if not dataa1['aggregations']['after_time']['value']:
-        print("time after error")
+        print("could not find such a path after input time. try different inputs?")
+        #Q: tho like if it doesn't exist, should we just use default before path????
         return False
     timea = dataa1['aggregations']['after_time']['value']
    
@@ -413,7 +416,7 @@ def find_path(es, host1, host2, ipv6, date, pair):
     #Else, it is [same][the_hops11]. The [same] bool makes sure we don't go to [the_hops12] if it doesn't exist
        
     
-def common_hops(es, ipv6, date, *sites):
+def common_hops(es, ipv6, date, hrs, *sites):
     if (len(sites) % 2 == 1):
         print("Error: sites must be in host dest PAIRS")
         return
@@ -422,10 +425,11 @@ def common_hops(es, ipv6, date, *sites):
         return
     n = 0
     pair = 1
+    mil = hrs * 3600000
     all_data = []
     #Get paths/data for all pairs and save them in all_data, looping above function
     while n < len(sites):
-        whatever = find_path(es, sites[n], sites[n+1], ipv6, date, pair)
+        whatever = find_path(es, sites[n], sites[n+1], ipv6, date, mil, pair)
         if (whatever == False):
             return
         all_data.append(whatever) 
