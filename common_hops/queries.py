@@ -204,6 +204,7 @@ def find_path(es, host1, host2, ipv6, date, mil, pair):
     hash11 = data11['aggregations']['the_hash']['buckets'][0]['key']
     #if (check_bools(es, hash11, pair) == False):
      #   return False
+    print(hash11)
     
     #Find hash of path at time before
     query12 = {
@@ -369,6 +370,39 @@ def find_path(es, host1, host2, ipv6, date, mil, pair):
     the_data.append(same)
     the_data.append(the_hops11)
     
+    #Check for looping
+    querylb4 = {
+      "size": 0,
+      "query": {
+        "bool": {
+          "filter": [
+            {
+              "term": {
+                "route-sha1": {
+                  "value": hash11
+                }
+              }
+            }
+          ]
+        }
+      },
+        "aggs": {
+            "loopb4": {
+              "terms": {
+                "field": "looping",
+                "order": {"_count" : "desc"},
+                "size": 1
+              }
+            }
+          }
+        }
+    
+    datalb4 = es.search(index='ps_trace', body=querylb4)  
+    loopb4 = datalb4['aggregations']['loopb4']['buckets'][0]['key']
+    the_data.append(loopb4)
+   
+
+    
     #If after time is different, find hop list associated with after hash    
     if (same == False):
         query32 = {
@@ -410,10 +444,41 @@ def find_path(es, host1, host2, ipv6, date, mil, pair):
             the_hops12.append([hops12[x], hops12[x+1], x])
         
         the_data.append(the_hops12)
+        
+        #Check for looping
+        queryla = {
+          "size": 0,
+          "query": {
+            "bool": {
+              "filter": [
+                {
+                  "term": {
+                    "route-sha1": {
+                      "value": hash12
+                    }
+                  }
+                }
+              ]
+            }
+          },
+            "aggs": {
+                "loopa": {
+                  "terms": {
+                    "field": "looping",
+                    "order": {"_count" : "desc"},
+                    "size": 1
+                  }
+                }
+              }
+            }
+
+        datala = es.search(index='ps_trace', body=queryla)  
+        loopa = datala['aggregations']['loopa']['buckets'][0]['key']
+        the_data.append(loopa)
     
     return the_data
-    #Format: the_data [same][the_hops11][the_hops12] (if the_hops12 exists)
-    #Else, it is [same][the_hops11]. The [same] bool makes sure we don't go to [the_hops12] if it doesn't exist
+    #Format: the_data [same][the_hops11][loopb4][the_hops12][loopa] (if the_hops12 exists)
+    #Else, it is [same][the_hops11][loopb4]. The [same] bool makes sure we don't go to [the_hops12] if it doesn't exist
        
     
 def common_hops(es, ipv6, date, hrs, *sites):
@@ -437,6 +502,7 @@ def common_hops(es, ipv6, date, hrs, *sites):
         n += 2
     
     after_exists = False #We won't run the after code if none exist
+    l_exists = False
     
     print("Pairs with a differing path before and after given time:")
     
@@ -450,11 +516,28 @@ def common_hops(es, ipv6, date, hrs, *sites):
         print("None")
     
     print('\n')
-        
+    
+    print("Pairs with looping in the path:")
+    
+    #Find and output all pairs that have differing before and after paths
+    for x in range(len(all_data)):
+        if (all_data[x][2] == True):
+            l_exists = True
+            print(x)
+        if (all_data[x][0] == False):
+            if (all_data[x][4] == True):
+                l_exists = True
+                print(x, " (in after path)")
+    
+    if (l_exists == False):
+        print("None")
+    
+    print('\n')
+    
+    #Q: Can I combine the above two loops to make it more efficient. Well, probably, but is it worth it?
     
     common_arr = [] #before
     common_arr2 = [] #existing afters, rest are before
-
     #Find the common hops between the first two pairs, and append to an array
     #element of common_arr: [from, to, place in path 1, place in path 2]
     for x in range(len(all_data[0][1])):
@@ -467,20 +550,20 @@ def common_hops(es, ipv6, date, hrs, *sites):
     if (after_exists == True):
         if (all_data[0][0] == False):
             if (all_data[1][0] == False):
-                for x in range(len(all_data[0][2])):
-                    for y in range(len(all_data[1][2])):
-                        if ((all_data[0][2][x][0] == all_data[1][2][y][0]) and (all_data[0][2][x][1] == all_data[1][2][y][1])):
-                            common_arr2.append([all_data[0][2][x][0], all_data[0][2][x][1], all_data[0][2][x][2], all_data[1][2][y][2]])
+                for x in range(len(all_data[0][3])):
+                    for y in range(len(all_data[1][3])):
+                        if ((all_data[0][3][x][0] == all_data[1][3][y][0]) and (all_data[0][3][x][1] == all_data[1][3][y][1])):
+                            common_arr2.append([all_data[0][3][x][0], all_data[0][3][x][1], all_data[0][3][x][2], all_data[1][3][y][2]])
             else:
-                for x in range(len(all_data[0][2])):
+                for x in range(len(all_data[0][3])):
                     for y in range(len(all_data[1][1])):
-                        if ((all_data[0][2][x][0] == all_data[1][1][y][0]) and (all_data[0][2][x][1] == all_data[1][1][y][1])):
-                            common_arr2.append([all_data[0][2][x][0], all_data[0][2][x][1], all_data[0][2][x][2], all_data[1][1][y][2]])
+                        if ((all_data[0][3][x][0] == all_data[1][1][y][0]) and (all_data[0][3][x][1] == all_data[1][1][y][1])):
+                            common_arr2.append([all_data[0][3][x][0], all_data[0][3][x][1], all_data[0][3][x][2], all_data[1][1][y][2]])
         elif (all_data[1][0] == False):
             for x in range(len(all_data[0][1])):
-                for y in range(len(all_data[1][2])):
-                    if ((all_data[0][1][x][0] == all_data[1][2][y][0]) and (all_data[0][1][x][1] == all_data[1][2][y][1])):
-                        common_arr2.append([all_data[0][1][x][0], all_data[0][1][x][1], all_data[0][1][x][2], all_data[1][2][y][2]])
+                for y in range(len(all_data[1][3])):
+                    if ((all_data[0][1][x][0] == all_data[1][3][y][0]) and (all_data[0][1][x][1] == all_data[1][3][y][1])):
+                        common_arr2.append([all_data[0][1][x][0], all_data[0][1][x][1], all_data[0][1][x][2], all_data[1][3][y][2]])
         else:
             common_arr2.append(common_arr[0])
         
@@ -500,11 +583,11 @@ def common_hops(es, ipv6, date, hrs, *sites):
 
         if (after_exists == True):
             if (all_data[pair][0] == False):
-                for x in range(len(all_data[pair][2])):
+                for x in range(len(all_data[pair][3])):
                     found = False
                     for y in range(len(common_arr2)):
-                        if ((all_data[pair][2][x][0] == common_arr2[y][0]) and (all_data[pair][2][x][1] == common_arr2[y][1])):
-                            common_arr2[y].append(all_data[pair][2][x][2])
+                        if ((all_data[pair][3][x][0] == common_arr2[y][0]) and (all_data[pair][3][x][1] == common_arr2[y][1])):
+                            common_arr2[y].append(all_data[pair][3][x][2])
                             found = True
                         if ((y == (len(common_arr2) - 1)) and (found == False)):
                             common_arr2.remove(common_arr2[y])  
@@ -647,4 +730,4 @@ def check_bools(es, hash_, pair):
         return False
    
     return True
- """   
+ """  
