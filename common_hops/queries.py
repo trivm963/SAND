@@ -282,50 +282,6 @@ def find_path(es, host1, host2, ipv6, date, mil, pair):
     else:
         same = False
     
-    #Find dest ip (since dest is not included in hash)
-    query15 = {
-      "size": 0,
-      "query": {
-        "bool": {
-          "filter": [
-            {
-              "term": {
-                "dest_host": {
-                  "value": host2
-                }
-              }
-            },
-            {
-              "term": {
-                "timestamp": {
-                  "value": str(timeb)
-                }
-              }
-            },
-            {
-              "term": {
-                "ipv6": {
-                  "value": ipv6
-                }
-              }
-            }
-          ]
-        }
-      },
-        "aggs": {
-            "dest_ip": {
-              "terms": {
-                "field": "dest",
-                "order": {"_count" : "desc"},
-                "size": 1
-              }
-            }
-          }
-        }
-    
-    data15 = es.search(index='ps_trace', body=query15)  
-    ip_d = data15['aggregations']['dest_ip']['buckets'][0]['key']
-    
     #Find hop list associated with before hash (as it is default)
     query31 = {
       "size": 0,
@@ -341,8 +297,36 @@ def find_path(es, host1, host2, ipv6, date, mil, pair):
             },
             {
               "term": {
-                "dest": {
-                  "value": ip_d
+                "src_host": {
+                  "value": host1
+                }
+              }
+            },
+            {
+              "term": {
+                "dest_host": {
+                  "value": host2
+                }
+              }
+            },
+            {
+              "term": {
+                "destination_reached": {
+                  "value": True
+                }
+              }
+            },
+            {
+              "term": {
+                "path_complete": {
+                  "value": True
+                }
+              }
+            },
+            {
+              "term": {
+                "ipv6": {
+                  "value": ipv6
                 }
               }
             }
@@ -419,8 +403,36 @@ def find_path(es, host1, host2, ipv6, date, mil, pair):
                 },
                 {
                   "term": {
-                    "dest": {
-                      "value": ip_d
+                    "src_host": {
+                      "value": host1
+                    }
+                  }
+                },
+                {
+                  "term": {
+                    "dest_host": {
+                      "value": host2
+                    }
+                  }
+                },
+                {
+                  "term": {
+                    "destination_reached": {
+                      "value": True
+                    }
+                  }
+                },
+                {
+                  "term": {
+                    "path_complete": {
+                      "value": True
+                    }
+                  }
+                },
+                {
+                  "term": {
+                    "ipv6": {
+                      "value": ipv6
                     }
                   }
                 }
@@ -730,4 +742,4 @@ def check_bools(es, hash_, pair):
         return False
    
     return True
- """  
+ """   
